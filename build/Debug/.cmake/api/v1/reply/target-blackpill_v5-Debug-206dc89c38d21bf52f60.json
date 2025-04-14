@@ -11,7 +11,9 @@
 		"commands" : 
 		[
 			"add_executable",
-			"target_link_libraries"
+			"target_link_libraries",
+			"target_include_directories",
+			"target_sources"
 		],
 		"files" : 
 		[
@@ -31,7 +33,19 @@
 			{
 				"command" : 1,
 				"file" : 0,
-				"line" : 64,
+				"line" : 66,
+				"parent" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 55,
+				"parent" : 0
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 49,
 				"parent" : 0
 			}
 		]
@@ -65,6 +79,10 @@
 			],
 			"includes" : 
 			[
+				{
+					"backtrace" : 3,
+					"path" : "/home/michal/Documents/programing_projects/blackpill_v5/Core/Src"
+				},
 				{
 					"backtrace" : 2,
 					"path" : "/home/michal/Documents/programing_projects/blackpill_v5/cmake/stm32cubemx/../../Core/Inc"
@@ -148,7 +166,8 @@
 				32,
 				33,
 				34,
-				35
+				35,
+				36
 			]
 		},
 		{
@@ -175,6 +194,10 @@
 			],
 			"includes" : 
 			[
+				{
+					"backtrace" : 3,
+					"path" : "/home/michal/Documents/programing_projects/blackpill_v5/Core/Src"
+				},
 				{
 					"backtrace" : 2,
 					"path" : "/home/michal/Documents/programing_projects/blackpill_v5/cmake/stm32cubemx/../../Core/Inc"
@@ -215,7 +238,7 @@
 			"language" : "ASM",
 			"sourceIndexes" : 
 			[
-				36
+				37
 			]
 		}
 	],
@@ -283,19 +306,26 @@
 				32,
 				33,
 				34,
-				35
+				35,
+				36
 			]
 		},
 		{
 			"name" : "",
 			"sourceIndexes" : 
 			[
-				36
+				37
 			]
 		}
 	],
 	"sources" : 
 	[
+		{
+			"backtrace" : 4,
+			"compileGroupIndex" : 0,
+			"path" : "Core/Src/ads1115.c",
+			"sourceGroupIndex" : 0
+		},
 		{
 			"backtrace" : 2,
 			"compileGroupIndex" : 0,

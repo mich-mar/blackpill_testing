@@ -1,20 +1,20 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2025 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file           : main.c
+ * @brief          : Main program body
+ ******************************************************************************
+ * @attention
+ *
+ * Copyright (c) 2025 STMicroelectronics.
+ * All rights reserved.
+ *
+ * This software is licensed under terms that can be found in the LICENSE file
+ * in the root directory of this software component.
+ * If no LICENSE file comes with this software, it is provided AS-IS.
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
@@ -26,6 +26,8 @@
 /* USER CODE BEGIN Includes */
 #include "usbd_cdc_if.h"
 #include "ads1115.h"
+#include <stdio.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,7 +37,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define ADC_READ_INTERVAL 1000 // Czas między odczytami w ms
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -52,21 +54,43 @@
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-
+void SendUSBMessage(char *message);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+void floatToString(float value, char *buffer)
+{
+  int intPart = (int)value;                 // Część całkowita
+  float fracPart = value - intPart;         // Część ułamkowa
+  int fracPartInt = (int)(fracPart * 1000); // Przekształcenie części ułamkowej na liczbę całkowitą
+
+  // Składanie stringa ręcznie
+  sprintf(buffer, "%d.%03d", intPart, abs(fracPartInt));
+}
+
+void I2C_Scan(I2C_HandleTypeDef *hi2c)
+{
+  char msg[64];
+  for (uint8_t addr = 1; addr < 128; addr++)
+  {
+    if (HAL_I2C_IsDeviceReady(hi2c, addr << 1, 1, 10) == HAL_OK)
+    {
+      sprintf(msg, "I2C device found at 0x%02X\r\n", addr);
+      SendUSBMessage(msg);
+    }
+  }
+}
+
 /* USER CODE END 0 */
 
 /**
-  * @brief  The application entry point.
-  * @retval int
-  */
+ * @brief  The application entry point.
+ * @retval int
+ */
 int main(void)
 {
-
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -93,25 +117,102 @@ int main(void)
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 
+  // Inicjalizacja ADS1115 i sprawdzenie statusu
+  char msg[100];
+  SendUSBMessage("System initialized...\r\n");
+  HAL_Delay(500); // Daj czas na stabilizację komunikacji USB
+
+  // Inicjalizacja ADS1115
+  ADS1115_Status status = ADS1115_Init();
+  if (status != ADS1115_OK)
+  {
+    sprintf(msg, "ADS1115 init error: %s\r\n", ADS1115_GetErrorString(status));
+    SendUSBMessage(msg);
+    // Wyślij dodatkowe informacje debugowania
+    ADS1115_PrintDebugInfo();
+  }
+  else
+  {
+    SendUSBMessage("ADS1115 initialized successfully\r\n");
+  }
+
+  uint32_t lastReadTime = 0;
+  int16_t adc_value;
+  float voltage;
+  bool conected;
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  uint16_t i = 0;
-  HAL_Delay(500);
+
   while (1)
   {
-    char data[50];  // Zwiększ rozmiar w zależności od potrzeb
+    // SendUSBMessage("Scanning I2C bus...\r\n");
+    // I2C_Scan(&hi2c1);
 
-    // Sformatuj dane
-    sprintf(data, "heej! %d\r\n", i);
-    
-    // Transmituj przez USB
-    CDC_Transmit_FS((uint8_t*)data, strlen(data));
-    HAL_Delay(500);
+    // conected = ADS1115_IsDeviceConnected();
 
-    i++;
-    
+    // Miganie LED jako wskaźnik działania
+    HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+
+    // Sprawdź, czy minął czas na kolejny odczyt
+    uint32_t currentTime = HAL_GetTick();
+    if (currentTime - lastReadTime >= ADC_READ_INTERVAL)
+    {
+      lastReadTime = currentTime;
+
+      // Sprawdź, czy urządzenie jest podłączone
+      if (!ADS1115_IsDeviceConnected())
+      {
+        SendUSBMessage("ADS1115 not detected! Checking connection...\r\n");
+
+        // Próba ponownej inicjalizacji
+        status = ADS1115_Init();
+        if (status != ADS1115_OK)
+        {
+          sprintf(msg, "ADS1115 reconnect failed: %s\r\n", ADS1115_GetErrorString(status));
+          SendUSBMessage(msg);
+        }
+        else
+        {
+          SendUSBMessage("ADS1115 reconnected successfully\r\n");
+        }
+        continue; // Przejdź do następnej iteracji pętli
+      }
+
+      // Odczyt wartości z kanału A0 z obsługą błędów
+      adc_value = ADS1115_ReadADC_A0(&status);
+
+      // Sprawdź status odczytu
+      if (status != ADS1115_OK)
+      {
+        sprintf(msg, "ADC read error: %s\r\n", ADS1115_GetErrorString(status));
+        SendUSBMessage(msg);
+
+        // W przypadku problemów, wyślij informacje debugowania
+        if (status == ADS1115_ERROR_TIMEOUT || status == ADS1115_ERROR_I2C)
+        {
+          ADS1115_PrintDebugInfo();
+        }
+      }
+      else
+      {
+        // Konwersja surowego odczytu na napięcie
+        voltage = ADS1115_ConvertToVoltage(adc_value, ADS1115_PGA_4_096V);
+
+        char voltage_str[50];
+        floatToString(voltage, voltage_str);
+
+        // Przygotowanie komunikatu do wysłania przez USB
+        sprintf(msg, "ADC Value: %d, Voltage: %s V\r\n", adc_value, voltage_str);
+        SendUSBMessage(msg);
+      }
+    }
+
+    // Krótkie opóźnienie dla oszczędzania zasobów procesora
+    HAL_Delay(50);
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -120,23 +221,23 @@ int main(void)
 }
 
 /**
-  * @brief System Clock Configuration
-  * @retval None
-  */
+ * @brief System Clock Configuration
+ * @retval None
+ */
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
   /** Configure the main internal regulator output voltage
-  */
+   */
   __HAL_RCC_PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
   /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_HSE;
+   * in the RCC_OscInitTypeDef structure.
+   */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI | RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
@@ -152,9 +253,8 @@ void SystemClock_Config(void)
   }
 
   /** Initializes the CPU, AHB and APB buses clocks
-  */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+   */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
@@ -167,13 +267,21 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+/**
+ * @brief  Wysyła komunikat przez interfejs USB CDC
+ * @param  message: Treść komunikatu do wysłania
+ * @retval None
+ */
+void SendUSBMessage(char *message)
+{
+  CDC_Transmit_FS((uint8_t *)message, strlen(message));
+}
 /* USER CODE END 4 */
 
 /**
-  * @brief  This function is executed in case of error occurrence.
-  * @retval None
-  */
+ * @brief  This function is executed in case of error occurrence.
+ * @retval None
+ */
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
@@ -185,14 +293,14 @@ void Error_Handler(void)
   /* USER CODE END Error_Handler_Debug */
 }
 
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
-  * @retval None
-  */
+ * @brief  Reports the name of the source file and the source line number
+ *         where the assert_param error has occurred.
+ * @param  file: pointer to the source file name
+ * @param  line: assert_param error line source number
+ * @retval None
+ */
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
