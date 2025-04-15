@@ -6,8 +6,8 @@
             "configurationProvider": "ms-vscode.cmake-tools",
             "intelliSenseMode": "${default}",
             "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/Core/Inc"
+                "${workspaceFolder}/**",    // <== changed
+                "${workspaceFolder}/Core/Inc"   // <== changed
             ],
             "browse": {
                 "path": [
